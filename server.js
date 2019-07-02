@@ -1,6 +1,10 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const imageProcess = require('./imageProcess');
+const dotenv = require('dotenv');
+dotenv.config();
+const PORT = process.env.BACKEND_PORT;
 
 const database = {
   users : [
@@ -32,26 +36,37 @@ app.get('/',(req, res) => {
 })
 
 app.post('/signin', (req, res) => {
-  if(req.body.email === database.users[0].email 
-    && req.body.password === database.users[0].password){
-      res.json({...database.users[database.users.length-1],password:''} );
-    }
-  else{
-    res.status(400).json("error loging in");
+  let { email, password } = req.body;
+  let found = false;
+  database.users.forEach(user => {
+    if(email === user.email 
+      && password === user.password){
+        found = true;
+        console.log(user)
+        res.json({...user,password:''} );
+      }
+  })
+  if(!found){
+      res.status(400).json("error loging in");
   }
 })
 
 app.post('/register', (req, res) => {
   const {email, password, name} = req.body;
-  database.users.push({
-    id : 113,
-    name :name,
-    email : email,
-    password : password,
-    entries : 0,
-    joined : new Date()
-  });
-  res.json({...database.users[database.users.length-1],password:''})
+  if(email && password && name){
+    database.users.push({
+      id : 113,
+      name :name,
+      email : email,
+      password : password,
+      entries : 0,
+      joined : new Date()
+    });
+    res.json({...database.users[database.users.length-1],password:''})
+  }
+  else{
+    res.status(400).json('Invalid input');
+  }
 })
 
 app.get('/profile/:id', (req, res) => {
@@ -83,6 +98,8 @@ app.put('/image',(req,res)=>{
   }
 })
 
-app.listen(4444, () => {
-  console.log("Server is running at 'localhost:4444'");
+app.post('/imageAnalysis',(req, res) => {imageProcess.analyseImage(req, res)})
+
+app.listen(PORT, () => {
+  console.log(`Server is listening to port ${PORT}`);
 });
