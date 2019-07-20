@@ -1,104 +1,123 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const imageProcess = require('./imageProcess');
-const dotenv = require('dotenv');
+const express = require("express");
+const mysql = require("mysql");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const dotenv = require("dotenv");
 dotenv.config();
 const PORT = process.env.BACKEND_PORT;
+const DBPASS = process.env.DB_PASSWORD;
+const imageProcess = require("./imageProcess");
 
-const database = {
-  users : [
-    {
-      id : 111,
-      name : 'john',
-      email : 'john@gmail.com',
-      password : "1234321",
-      entries : 0,
-      joined : new Date()
-    },
-    {
-      id : 112,
-      name : 'doe',
-      email : 'doe@gmail.com',
-      password : "4321234",
-      entries : 0,
-      joined : new Date()
-    }
-  ]
-}
+const dbConnection = mysql.createConnection({
+  host: "db4free.net",
+  user: "root_test_002",
+  password: "002testroot",
+  database: "mysql_test_data"
+});
+
 
 const app = express();
-app.use(cors())
+app.use(cors());
 app.use(bodyParser.json());
 
-app.get('/',(req, res) => {
-  res.json(database);
-})
-
-app.post('/signin', (req, res) => {
-  let { email, password } = req.body;
-  let found = false;
-  database.users.forEach(user => {
-    if(email === user.email 
-      && password === user.password){
-        found = true;
-        console.log(user)
-        res.json({...user,password:''} );
-      }
-  })
-  if(!found){
-      res.status(400).json("error loging in");
-  }
-})
-
-app.post('/register', (req, res) => {
-  const {email, password, name} = req.body;
-  if(email && password && name){
-    database.users.push({
-      id : 113,
-      name :name,
-      email : email,
-      password : password,
-      entries : 0,
-      joined : new Date()
-    });
-    res.json({...database.users[database.users.length-1],password:''})
-  }
-  else{
-    res.status(400).json('Invalid input');
-  }
-})
-
-app.get('/profile/:id', (req, res) => {
-  const { id } = req.params;
-  let found = false;
-  database.users.forEach(user => {
-    if (user.id == id){
-      found = true;
-      return res.json(user);
+app.get("/", (req, res) => {
+  dbConnection.connect(err => {
+    if (err) {
+      console.log(err);
+    } else {
+      dbConnection.query("select * from users", (err, result) => {
+        if (err) {
+          res.status(400).json({
+            status: 400,
+            message: "Error connecting to database"
+          });
+        } else {
+          res.json({
+            status: 200,
+            message: "Connected to database"
+          });
+        }
+      });
     }
-  })
-  if(!found){
-    res.status(400).json("not found");
-  }
-})
+  });
+});
 
-app.put('/image',(req,res)=>{
+app.post("/signin", (req, res) => {
+  let { email, password } = req.body;
+  let sqlQuery =
+    "select * from users where email = " +
+    mysql.escape(email) +
+    "and password = " +
+    mysql.escape(password);
+  dbConnection.query(sqlQuery, (err, result) => {
+    if (err) {
+      res.status(404).json("Network error");
+    } else {
+      if (result.length == 0) {
+        res.status(404).json("Wrong email or password.");
+      } else {
+        res.json(result[0]);
+      }
+    }
+  });
+});
+
+app.post("/register", (req, res) => {
+  const { email, password, name } = req.body;
+  if (email && password && name) {
+    const values = [[name, email, password]];
+    const sqlQuery = "insert into users (name, email, password) values ?";
+    dbConnection.query(sqlQuery, [values], (err, result) => {
+      if (err) {
+        res.status(400).json("Network error.");
+      } else {
+        dbConnection.query(
+          `select * from users where id = ${result.insertId}`,
+          (err, result) => {
+            if (err) {
+              res
+                .status(400)
+                .json("User created, error connecting to database");
+            } else {
+              res.json(result[0]);
+            }
+          }
+        );
+      }
+    });
+  } else {
+    res.status(400).json("Invalid input");
+  }
+});
+
+
+app.put("/image", (req, res) => {
   const { id } = req.body;
   let found = false;
-  database.users.forEach(user => {
-    if(user.id == id){
-      found = true;
-      user.entries++;
-      return res.json(user.entries);
+  let sqlQuery = 'select * from users where id = ' + mysql.escape(id);
+  dbConnection.query(sqlQuery, (err, result) => {
+    if(err){
+      res.status(400).json('Network error occured while increasing count.');
+    }
+    else{
+      console.log(result);
+      let entries = result[0].entries + 1;
+      dbConnection.query(`update users set entries = ${entries} where id = ${id}`,(err, result) => {
+        if(err){
+          res.json('Network error occured while increasing count');
+        }
+        else{
+          console.log(entries)
+          res.json(entries)
+        }
+      })
     }
   })
-  if(!found){
-    res.status(400).json("not found");
-  }
-})
+});
 
-app.post('/imageAnalysis',(req, res) => {imageProcess.analyseImage(req, res)})
+app.post("/imageAnalysis", (req, res) => {
+  imageProcess.analyseImage(req, res);
+});
 
 app.listen(PORT, () => {
   console.log(`Server is listening to port ${PORT}`);
